@@ -146,6 +146,7 @@ QO3-FIO-Framework/
 │   ├── __init__.py
 │   └── qo3_fio.py          # Main module
 ├── paper/
+    ├── QO3_FIO_Framework_Paper.pdf
 │   └── main.tex            # LaTeX paper
 ├── examples/
 │   └── basic_usage.py
