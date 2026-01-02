@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "QO3/FIO Framework: Fractal-Informational Regime Detection in Seismicity"
+version: "2.2.0"
+date-released: "2026-01-02"
+authors:
+  - family-names: "Chechelnitsky"
+    given-names: "Igor"
+    orcid: "https://orcid.org/0009-0007-4607-1946"
+    affiliation: "Independent Researcher, Ashkelon, Israel"
+license: "CC-BY-4.0"
+repository-code: "https://github.com/username/QO3-FIO-Framework"
+keywords:
+  - seismology
+  - earthquake
+  - regime detection
+  - b-value
+  - declustering
+  - bootstrap
+  - operator theory
+  - fractal
+  - information theory
+abstract: >-
+  A mathematically rigorous framework for detecting risk regimes in seismicity
+  based on fractal-informational invariants (b-value, CV, SID) and operator-spectral
+  formulation. Features causality-preserving declustering, bias-corrected estimators,
+  blocked bootstrap confidence intervals, and production-ready implementation.
+references:
+  - type: article
+    authors:
+      - family-names: "Chechelnitsky"
+        given-names: "Igor"
+    title: "QADMON Operator Theory: Foundations"
+    year: 2025
+    doi: "10.5281/zenodo.18101985"
+  - type: article
+    authors:
+      - family-names: "Chechelnitsky"
+        given-names: "Igor"
+    title: "Fractal Information Ontology: Extensions"
+    year: 2025
+    doi: "10.5281/zenodo.18110450"

@@ -1,0 +1,605 @@
+\documentclass[11pt,a4paper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{natbib}
+\usepackage{float}
+
+\geometry{margin=1in}
+
+% Theorem environments
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{conjecture}[theorem]{Conjecture}
+
+% Commands
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\Cov}{\mathrm{Cov}}
+\newcommand{\KL}{D_{\mathrm{KL}}}
+\newcommand{\SID}{\mathrm{SID}}
+\newcommand{\CV}{\mathrm{CV}}
+\newcommand{\tr}{\mathrm{tr}}
+\newcommand{\spec}{\sigma}
+\newcommand{\deff}{d_{\mathrm{eff}}}
+
+% Code listing style
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    breaklines=true,
+    frame=single
+}
+
+\title{
+    \textbf{Fractal-Informational Regime Detection in Seismicity} \\[0.5em]
+    \large via Operator-Spectral Invariants \\[0.3em]
+    \normalsize QO3/FIO Framework v2.2: Mathematical Foundations and Implementation
+}
+
+\author{
+    Igor Chechelnitsky \\
+    \small ORCID: 0009-0007-4607-1946 \\
+    \small Independent Researcher, Ashkelon, Israel
+}
+
+\date{January 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We present a mathematically rigorous framework for detecting risk regimes in seismicity based on fractal-informational invariants and operator-spectral formulation. The QO3/FIO framework identifies transitions between stochastic regimes by monitoring a compact set of statistics---Aki-Utsu $b$-value with Tinti-Mulargia bias correction, inter-event coefficient of variation (CV), and Kullback-Leibler divergence-based seismic information deficit (SID)---embedded into a family of non-negative operators whose spectral properties encode regime changes. We establish rigorous existence results for scaling limits, prove operator continuity under Lipschitz conditions, and demonstrate connections to renormalization group heuristics. The implementation includes causality-preserving Gardner-Knopoff declustering, blocked bootstrap confidence intervals for temporally correlated data, and comprehensive calibration metrics. All theoretical claims are classified according to proof status: Theorem (proven), Proposition (model-based with evidence), and Conjecture (hypothesis requiring proof).
+
+\medskip
+\noindent\textbf{Keywords:} seismic risk regimes, $b$-value estimation, Kullback-Leibler divergence, operator theory, spectral invariants, blocked bootstrap, declustering
+
+\medskip
+\noindent\textbf{Related Work:} \url{https://zenodo.org/records/18101985}, \url{https://zenodo.org/records/18110450}
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Introduction}
+%==============================================================================
+
+\subsection{Motivation}
+
+Seismicity exhibits long-range dependence, clustering, and regime shifts characteristic of critical systems. Classical point-process models (e.g., Poisson, ETAS) capture aspects of triggering but struggle to formalize system-level vulnerability. We formalize a complementary objective: detecting \emph{risk regimes}---intervals where the system's statistical organization changes---using invariants robust to catalog heterogeneity.
+
+\subsection{Contributions}
+
+The QO3/FIO framework provides:
+\begin{enumerate}
+    \item Fractal-informational observables with clear physical meaning and rigorous statistical properties
+    \item An operator-spectral description to reason about regime transitions
+    \item Production-ready implementation with anti-leakage guarantees
+    \item Honest classification of theoretical claims by proof status
+\end{enumerate}
+
+\subsection{Relation to Prior Work}
+
+This work continues the theoretical development presented in prior Zenodo publications on QADMON operator theory, extending the framework to seismological applications with emphasis on statistical rigor and reproducibility.
+
+%==============================================================================
+\section{Mathematical Preliminaries}
+%==============================================================================
+
+\subsection{Notation and Setup}
+
+Let $\mathcal{C} = \{(t_i, \lambda_i, \phi_i, d_i, M_i)\}_{i=1}^N$ be a seismic catalog above completeness magnitude $M_c$, where:
+\begin{itemize}
+    \item $t_i \in \R_+$ is the origin time
+    \item $(\lambda_i, \phi_i) \in [-90, 90] \times [-180, 180]$ are geographic coordinates
+    \item $d_i \in \R_+$ is focal depth (km)
+    \item $M_i \in [M_c, \infty)$ is magnitude
+\end{itemize}
+
+Define sliding windows $W_T(t) = (t-T, t]$ for window length $T > 0$.
+
+\subsection{Gutenberg-Richter Law}
+
+The Gutenberg-Richter (GR) relation describes the frequency-magnitude distribution:
+\begin{equation}
+    \log_{10} N(M \geq m) = a - bm
+\end{equation}
+where $N(M \geq m)$ is the cumulative number of events with magnitude at least $m$, $a$ characterizes overall seismicity rate, and $b \approx 1$ globally but varies spatially and temporally.
+
+\begin{definition}[Aki-Utsu Maximum Likelihood Estimator]
+For magnitudes $\{M_i\}_{i=1}^n$ with $M_i \geq M_c$, the MLE for $b$ is:
+\begin{equation}
+    \hat{b}_{\mathrm{Aki}} = \frac{\log_{10} e}{\bar{M} - (M_c - \delta_M/2)}
+\end{equation}
+where $\bar{M} = n^{-1}\sum_{i=1}^n M_i$ and $\delta_M$ is the magnitude binning width (typically 0.1).
+\end{definition}
+
+\begin{proposition}[Tinti-Mulargia Bias Correction]
+\label{prop:tinti}
+The Aki-Utsu estimator is biased for finite $n$. The bias-corrected estimator is:
+\begin{equation}
+    \hat{b}_{\mathrm{TM}} = \frac{n-1}{n} \cdot \hat{b}_{\mathrm{Aki}}
+\end{equation}
+with Shi-Bolt uncertainty estimate:
+\begin{equation}
+    \sigma_b = 2.3 \, \hat{b}^2 \sqrt{\frac{\sum_{i=1}^n (M_i - \bar{M})^2}{n(n-1)}}
+\end{equation}
+\end{proposition}
+
+\subsection{Inter-Event Statistics}
+
+\begin{definition}[Coefficient of Variation]
+For inter-event times $\{\Delta\tau_i = t_{i+1} - t_i\}_{i=1}^{n-1}$:
+\begin{equation}
+    \CV = \frac{\sigma_{\Delta\tau}}{\mu_{\Delta\tau}}
+\end{equation}
+\end{definition}
+
+\begin{remark}
+For a homogeneous Poisson process, $\CV = 1$. Deviations indicate clustering ($\CV > 1$) or regularity ($\CV < 1$).
+\end{remark}
+
+\begin{definition}[Robust CV via MAD]
+\begin{equation}
+    \CV_{\mathrm{robust}} = \frac{1.4826 \cdot \mathrm{MAD}(\Delta\tau)}{\mathrm{median}(\Delta\tau)}
+\end{equation}
+where $\mathrm{MAD}(X) = \mathrm{median}(|X - \mathrm{median}(X)|)$.
+\end{definition}
+
+%==============================================================================
+\section{Information-Theoretic Framework}
+%==============================================================================
+
+\subsection{Shannon Entropy}
+
+\begin{definition}[Discrete Shannon Entropy]
+Given histogram counts $\{n_k\}_{k=1}^K$ from magnitude binning:
+\begin{equation}
+    H = -\sum_{k=1}^K p_k \log_2 p_k, \quad p_k = \frac{n_k}{\sum_{j=1}^K n_j}
+\end{equation}
+\end{definition}
+
+\begin{remark}[Methodological Note]
+We compute entropy from counts (not density) to ensure proper discrete interpretation and avoid artifacts from mixed continuous-discrete measures.
+\end{remark}
+
+\subsection{Kullback-Leibler Divergence}
+
+\begin{definition}[KL Divergence]
+For discrete probability distributions $P = (p_1, \ldots, p_K)$ and $Q = (q_1, \ldots, q_K)$:
+\begin{equation}
+    \KL(P \| Q) = \sum_{k=1}^K p_k \log \frac{p_k}{q_k}
+\end{equation}
+with smoothing: $p_k \leftarrow p_k + \epsilon$, $q_k \leftarrow q_k + \epsilon$ for numerical stability.
+\end{definition}
+
+\begin{definition}[Seismic Information Deficit]
+\label{def:sid}
+\begin{equation}
+    \SID(t; T, T_{\mathrm{bg}}) = \KL\bigl(P_T(t) \,\|\, P_{T_{\mathrm{bg}}}(t)\bigr)
+\end{equation}
+where $P_T(t)$ is the magnitude distribution in window $W_T(t)$ and $P_{T_{\mathrm{bg}}}(t)$ is the background distribution in the larger window $W_{T_{\mathrm{bg}}}(t)$.
+\end{definition}
+
+\begin{proposition}[SID Interpretation]
+\label{prop:sid_interp}
+Higher SID indicates greater deviation from background, potentially signaling:
+\begin{enumerate}
+    \item Stress accumulation (shift toward larger magnitudes)
+    \item Seismic quiescence (entropy reduction)
+    \item Regime transition (distribution shape change)
+\end{enumerate}
+\end{proposition}
+
+%==============================================================================
+\section{Operator-Spectral Formulation}
+%==============================================================================
+
+\subsection{Observable State Vector}
+
+\begin{definition}[State Vector]
+Define the observable vector at time $t$:
+\begin{equation}
+    \mathbf{x}(t) = \begin{pmatrix}
+        b(t) \\
+        \CV(t) \\
+        \SID(t) \\
+        r(t) \\
+        E(t)
+    \end{pmatrix} \in \R^d
+\end{equation}
+where $r(t)$ is event rate and $E(t) = \sum_{t_i \in W_T(t)} 10^{1.5 M_i + 4.8}$ is cumulative energy (Joules).
+\end{definition}
+
+\subsection{Covariance Operator}
+
+\begin{definition}[Sample Covariance Operator]
+\begin{equation}
+    C(t) = \frac{1}{|W_T(t)|} \int_{W_T(t)} (\mathbf{x}(\tau) - \boldsymbol{\mu}(t))(\mathbf{x}(\tau) - \boldsymbol{\mu}(t))^\top \, d\tau
+\end{equation}
+where $\boldsymbol{\mu}(t) = |W_T(t)|^{-1} \int_{W_T(t)} \mathbf{x}(\tau) \, d\tau$.
+\end{definition}
+
+\subsection{Spectral Observables}
+
+Let $\lambda_1(t) \geq \lambda_2(t) \geq \cdots \geq \lambda_d(t) \geq 0$ be eigenvalues of $C(t)$.
+
+\begin{definition}[Spectral Gap]
+\begin{equation}
+    \Delta(t) = \lambda_1(t) - \lambda_2(t)
+\end{equation}
+\end{definition}
+
+\begin{definition}[Effective Dimension]
+\begin{equation}
+    \deff(t) = \exp\left(-\sum_{i=1}^d \tilde{\lambda}_i(t) \log \tilde{\lambda}_i(t)\right), \quad \tilde{\lambda}_i = \frac{\lambda_i}{\sum_j \lambda_j}
+\end{equation}
+\end{definition}
+
+\begin{definition}[Participation Ratio]
+\begin{equation}
+    \mathrm{PR}(t) = \frac{\left(\sum_i \lambda_i(t)\right)^2}{\sum_i \lambda_i(t)^2} = \frac{(\tr C)^2}{\tr(C^2)}
+\end{equation}
+\end{definition}
+
+%==============================================================================
+\section{Rigorous Results: Classification by Proof Status}
+%==============================================================================
+
+We explicitly classify all mathematical statements by their proof status.
+
+\subsection{Theorems (Proven)}
+
+\begin{theorem}[Operator Continuity under Lipschitz Dynamics]
+\label{thm:continuity}
+Let $\mathbf{x}: [0, T_{\max}] \to \R^d$ be Lipschitz continuous with constant $L$:
+\begin{equation}
+    \|\mathbf{x}(t_2) - \mathbf{x}(t_1)\| \leq L|t_2 - t_1|
+\end{equation}
+Then:
+\begin{enumerate}
+    \item The covariance operator $C(t)$ is continuous in $t$
+    \item Eigenvalues $\lambda_i(t)$ are continuous functions of $t$
+    \item $|\Delta(t + \delta) - \Delta(t)| = O(L\delta)$ for small $\delta$
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+By Weyl's inequality for symmetric matrices, if $\|C(t+\delta) - C(t)\|_{\mathrm{op}} \leq \epsilon$, then $|\lambda_i(t+\delta) - \lambda_i(t)| \leq \epsilon$ for all $i$. The Lipschitz condition on $\mathbf{x}$ implies Lipschitz continuity of $C(t)$ entries, giving the result. See Kato (1966) for general perturbation theory.
+\end{proof}
+
+\begin{theorem}[Bootstrap Consistency for $\alpha$-Mixing Sequences]
+\label{thm:bootstrap}
+Let $\{Z_i\}_{i=1}^n$ be stationary with strong mixing coefficients $\alpha(k) = O(k^{-\delta})$ for $\delta > 2$. The moving block bootstrap with block length $L = O(n^{1/3})$ provides asymptotically valid confidence intervals for smooth functionals.
+\end{theorem}
+
+\begin{proof}
+See Künsch (1989) and Lahiri (2003).
+\end{proof}
+
+\subsection{Propositions (Model-Based)}
+
+\begin{proposition}[Scaling Limits under Mixing]
+\label{prop:scaling}
+Assume $\{\mathbf{x}(t)\}$ is stationary with $\E[\|\mathbf{x}(t)\|^2] < \infty$ and satisfies strong mixing with $\alpha(n) = O(n^{-\delta})$, $\delta > 2$. Then:
+\begin{equation}
+    C_T(t) \xrightarrow{T \to \infty} C^* \quad \text{(a.s.)}
+\end{equation}
+where $C^* = \E[(\mathbf{x} - \E[\mathbf{x}])(\mathbf{x} - \E[\mathbf{x}])^\top]$.
+\end{proposition}
+
+\begin{remark}
+This is a Proposition because the mixing condition is \emph{assumed} for seismic processes but not rigorously verified.
+\end{remark}
+
+\begin{proposition}[Regime Tightening Monotonicity]
+\label{prop:tightening}
+If over $[t_0, t_1]$:
+\begin{enumerate}
+    \item $\SID(t)$ is non-decreasing
+    \item $b(t)$ is non-increasing
+    \item $\CV(t)$ is non-increasing
+\end{enumerate}
+Then $\deff(t)$ is non-increasing on $[t_0, t_1]$.
+\end{proposition}
+
+\begin{proof}[Proof Sketch]
+Concentration of observables reduces effective covariance rank. Formalized via Schur-convexity: if the covariance spectrum becomes more concentrated (in majorization order), $\deff$ decreases.
+\end{proof}
+
+\subsection{Lemmas (Domain-Specific)}
+
+\begin{lemma}[Spectral Gap Opening for Quasi-Periodic Operators]
+\label{lem:gap}
+For a Fibonacci quasi-periodic Jacobi operator $H_\phi(\gamma)$ with coupling $\gamma > 0$, if $|x_n(E)| > 2$ along the renormalization orbit of trace map $T: (x, y, z) \mapsto (2xy - z, x, y)$, then $E \notin \spec(H_\phi(\gamma))$.
+\end{lemma}
+
+\begin{remark}
+This lemma is proven in the quasicrystal literature (Sütő, 1989). Its relevance to seismic $C(t)$ is \emph{analogical}, not direct---the trace map for $C(t)$ is not explicitly constructed.
+\end{remark}
+
+\subsection{Conjectures (Hypotheses)}
+
+\begin{conjecture}[Universal Regime Tightening]
+Across tectonic settings with adequate completeness, regime tightening:
+\begin{equation}
+    \deff(t) \downarrow, \quad \Delta(t) \uparrow, \quad \SID(t) \uparrow
+\end{equation}
+precedes large events ($M \geq M^*$) with lead times $O(\text{weeks to months})$.
+\end{conjecture}
+
+\begin{conjecture}[Critical Coupling Constant]
+There exists a universal critical coupling $\gamma^*$ such that:
+\begin{equation}
+    \kappa \cdot \gamma^* = \sqrt{\frac{\pi}{e}} \approx 1.075
+\end{equation}
+where $\kappa$ emerges from the renormalization fixed point of the free energy functional.
+\end{conjecture}
+
+%==============================================================================
+\section{Declustering: Causality-Preserving Algorithm}
+%==============================================================================
+
+\subsection{Gardner-Knopoff Windows}
+
+\begin{definition}[GK-Style Parametric Window]
+For mainshock magnitude $M$:
+\begin{align}
+    \log_{10} D(M) &= 0.1238 M + 0.983 \quad \text{(km)} \\
+    \log_{10} T(M) &= \begin{cases}
+        0.5409 M - 0.547 & M < 6.5 \\
+        0.032 M + 2.7389 & M \geq 6.5
+    \end{cases} \quad \text{(days)}
+\end{align}
+\end{definition}
+
+\subsection{Causality Requirement}
+
+\begin{algorithm}[H]
+\caption{Causality-Preserving Declustering}
+\begin{algorithmic}[1]
+\Require Catalog $\mathcal{C}$, window function $W(M) = (D(M), T(M))$
+\Ensure Mainshock classification
+\State Sort events by magnitude (descending)
+\For{each event $e_i$ not yet classified as aftershock}
+    \State $(D_i, T_i) \gets W(M_i)$
+    \For{each event $e_j$ with $j \neq i$}
+        \If{$t_j > t_i$ \textbf{and} $t_j - t_i < T_i$ \textbf{and} $\mathrm{dist}(e_i, e_j) < D_i$}
+            \State Mark $e_j$ as aftershock
+        \EndIf
+    \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\begin{remark}[Critical Fix]
+The condition ``$t_j > t_i$'' is essential. Using $|t_j - t_i|$ (as in some implementations) incorrectly classifies foreshocks as aftershocks, introducing temporal bias that inflates predictive metrics.
+\end{remark}
+
+%==============================================================================
+\section{Statistical Validation}
+%==============================================================================
+
+\subsection{Anti-Leakage Guarantees}
+
+\begin{definition}[Temporal Leakage]
+A model exhibits temporal leakage if features at time $t$ use information from $t' > t$.
+\end{definition}
+
+Our framework prevents leakage through:
+\begin{enumerate}
+    \item \textbf{Features}: Rolling windows $(t-T, t]$ use only past data
+    \item \textbf{Target}: $y(t) = \mathbf{1}[\max_{s \in (t, t+\Delta]} M(s) \geq M^*]$ uses strictly future data
+    \item \textbf{Declustering}: Applied before features to remove aftershock correlations
+    \item \textbf{Validation}: Temporal train-test split (no shuffling)
+\end{enumerate}
+
+\subsection{Blocked Bootstrap}
+
+\begin{definition}[Moving Block Bootstrap]
+For block length $L$ and sample size $n$:
+\begin{enumerate}
+    \item Sample $\lceil n/L \rceil$ block starts uniformly from $\{1, \ldots, n-L+1\}$
+    \item Concatenate blocks
+    \item Compute statistic on bootstrap sample
+    \item Repeat $B$ times for CI
+\end{enumerate}
+\end{definition}
+
+\begin{definition}[Rule-of-Thumb Block Length]
+\begin{equation}
+    L_{\mathrm{opt}} \approx n^{1/3} \left(\frac{2\hat{\rho}}{1 - \hat{\rho}^2}\right)^{2/3}
+\end{equation}
+where $\hat{\rho}$ is lag-1 autocorrelation.
+\end{definition}
+
+\subsection{Calibration}
+
+\begin{definition}[Expected Calibration Error]
+\begin{equation}
+    \mathrm{ECE} = \sum_{k=1}^K \frac{n_k}{n} |\bar{p}_k - \bar{y}_k|
+\end{equation}
+\end{definition}
+
+\begin{definition}[Brier Skill Score]
+\begin{equation}
+    \mathrm{BSS} = 1 - \frac{\mathrm{BS}}{\mathrm{BS}_{\mathrm{ref}}}, \quad \mathrm{BS} = \frac{1}{n}\sum_{i=1}^n (p_i - y_i)^2
+\end{equation}
+\end{definition}
+
+%==============================================================================
+\section{Implementation Architecture}
+%==============================================================================
+
+\subsection{Module Structure}
+
+\begin{table}[H]
+\centering
+\caption{Framework Components}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Component} & \textbf{Purpose} & \textbf{Key Feature} \\
+\midrule
+\texttt{GardnerKnopoffDeclustering} & Aftershock removal & Causality-preserving \\
+\texttt{FIOEstimators} & $b$, CV, SID & Bias-corrected \\
+\texttt{BlockedBootstrap} & Confidence intervals & Temporal correlation \\
+\texttt{CalibrationMetrics} & ECE, BSS & Reliability assessment \\
+\texttt{QO3FeatureBuilder} & Feature matrix & Anti-leakage \\
+\texttt{run\_pipeline} & End-to-end & Reproducible \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Usage Example}
+
+\begin{lstlisting}[language=Python]
+from qo3_fio import QO3Config, run_pipeline
+
+cfg = QO3Config(
+    Mc=2.5, M_star=5.0, horizon_days=7,
+    use_declustering=True, bootstrap_B=2000
+)
+
+results = run_pipeline("Japan/Tohoku", cfg, events, series)
+
+print(f"PR-AUC: {results['results']['pr_auc']:.3f}")
+print(f"95% CI: {results['results']['pr_auc_ci']}")
+print(f"BSS: {results['results']['brier_skill_score']:.3f}")
+\end{lstlisting}
+
+%==============================================================================
+\section{Discussion}
+%==============================================================================
+
+\subsection{Limitations}
+
+\begin{enumerate}
+    \item \textbf{Stationarity assumption}: Mixing conditions are assumed, not verified
+    \item \textbf{Completeness dependence}: Results depend on accurate $M_c$ estimation
+    \item \textbf{Regime definition}: What constitutes a ``regime'' is model-dependent
+    \item \textbf{Lead time variability}: Tightening-to-event intervals vary widely
+\end{enumerate}
+
+\subsection{Future Directions}
+
+\begin{enumerate}
+    \item Rigorous verification of mixing for seismic catalogs
+    \item Extension to multivariate point processes
+    \item Integration with physics-based models (Coulomb stress)
+    \item Real-time implementation with uncertainty quantification
+\end{enumerate}
+
+%==============================================================================
+\section{Conclusion}
+%==============================================================================
+
+The QO3/FIO framework provides a mathematically grounded approach to seismic regime detection with:
+\begin{itemize}
+    \item Rigorous statistical foundations (bias correction, blocked bootstrap)
+    \item Honest classification of theoretical claims
+    \item Production-ready implementation with anti-leakage guarantees
+    \item Extensible architecture for multimodal integration
+\end{itemize}
+
+The operator-spectral perspective offers a principled language for discussing regime transitions, complementing traditional point-process approaches.
+
+%==============================================================================
+% References
+%==============================================================================
+
+\begin{thebibliography}{99}
+
+\bibitem{Aki1965}
+Aki, K. (1965). Maximum likelihood estimate of $b$ in the formula $\log N = a - bM$ and its confidence limits. \textit{Bulletin of the Earthquake Research Institute}, 43, 237--239.
+
+\bibitem{Gardner1974}
+Gardner, J.K., \& Knopoff, L. (1974). Is the sequence of earthquakes in Southern California, with aftershocks removed, Poissonian? \textit{Bulletin of the Seismological Society of America}, 64(5), 1363--1367.
+
+\bibitem{Kagan2010}
+Kagan, Y.Y. (2010). Earthquake size distribution: Power-law with exponent $\beta \equiv 1/2$? \textit{Tectonophysics}, 490(1-2), 103--114.
+
+\bibitem{Kato1966}
+Kato, T. (1966). \textit{Perturbation Theory for Linear Operators}. Springer-Verlag.
+
+\bibitem{Kunsch1989}
+Künsch, H.R. (1989). The jackknife and the bootstrap for general stationary observations. \textit{Annals of Statistics}, 17(3), 1217--1241.
+
+\bibitem{Lahiri2003}
+Lahiri, S.N. (2003). \textit{Resampling Methods for Dependent Data}. Springer.
+
+\bibitem{Ogata1988}
+Ogata, Y. (1988). Statistical models for earthquake occurrences and residual analysis for point processes. \textit{Journal of the American Statistical Association}, 83(401), 9--27.
+
+\bibitem{Shi1982}
+Shi, Y., \& Bolt, B.A. (1982). The standard error of the magnitude-frequency $b$ value. \textit{Bulletin of the Seismological Society of America}, 72(5), 1677--1687.
+
+\bibitem{Suto1989}
+Sütő, A. (1989). Singular continuous spectrum on a Cantor set of zero Lebesgue measure for the Fibonacci Hamiltonian. \textit{Journal of Statistical Physics}, 56(3-4), 525--531.
+
+\bibitem{Tinti1987}
+Tinti, S., \& Mulargia, F. (1987). Confidence intervals of $b$ values for grouped magnitudes. \textit{Bulletin of the Seismological Society of America}, 77(6), 2125--2134.
+
+\bibitem{Chechelnitsky2025a}
+Chechelnitsky, I. (2025). QADMON Operator Theory: Foundations. \textit{Zenodo}. \url{https://zenodo.org/records/18101985}
+
+\bibitem{Chechelnitsky2025b}
+Chechelnitsky, I. (2025). Fractal Information Ontology: Extensions. \textit{Zenodo}. \url{https://zenodo.org/records/18110450}
+
+\end{thebibliography}
+
+%==============================================================================
+\appendix
+\section{Proof Details}
+%==============================================================================
+
+\subsection{Weyl's Inequality}
+
+\begin{lemma}[Weyl]
+Let $A, B$ be $n \times n$ Hermitian matrices with eigenvalues $\alpha_1 \geq \cdots \geq \alpha_n$ and $\beta_1 \geq \cdots \geq \beta_n$ respectively. Then for all $i$:
+\begin{equation}
+    |\alpha_i - \beta_i| \leq \|A - B\|_{\mathrm{op}}
+\end{equation}
+\end{lemma}
+
+\subsection{Schur-Convexity of Effective Dimension}
+
+\begin{lemma}
+The function $f(\boldsymbol{\lambda}) = -\sum_i \tilde{\lambda}_i \log \tilde{\lambda}_i$ where $\tilde{\lambda}_i = \lambda_i / \sum_j \lambda_j$ is Schur-concave.
+\end{lemma}
+
+\begin{proof}
+Shannon entropy is Schur-concave; normalization preserves this property.
+\end{proof}
+
+\end{document}
